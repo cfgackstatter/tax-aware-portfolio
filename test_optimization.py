@@ -11,7 +11,7 @@ portfolio = Portfolio()
 current_date = datetime(2025, 4, 9)
 
 # Add tax lots for two tickers
-portfolio.buy("AAPL", 10, 190.0, current_date - timedelta(days=400))  # Long-term
+portfolio.buy("AAPL", 10, 180.0, current_date - timedelta(days=400))  # Long-term
 portfolio.buy("AAPL", 5, 160.0, current_date - timedelta(days=200))   # Short-term
 portfolio.buy("MSFT", 8, 250.0, current_date - timedelta(days=500))   # Long-term
 portfolio.buy("MSFT", 2, 280.0, current_date - timedelta(days=100))   # Short-term
@@ -29,8 +29,9 @@ current_prices = {
     "MSFT": 300.0
 }
 
-# Risk aversion parameter
+# Risk and tax aversion parameters
 risk_aversion = 2.0
+tax_aversion = 1.0
 
 # Run the optimization
 result = optimize_mean_variance(
@@ -38,6 +39,7 @@ result = optimize_mean_variance(
     alphas=alphas,
     cov_matrix=cov_matrix,
     risk_aversion=risk_aversion,
+    tax_aversion=tax_aversion,
     current_prices=current_prices,
     short_term_rate=0.35,
     long_term_rate=0.15,
