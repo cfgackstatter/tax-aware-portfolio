@@ -223,7 +223,7 @@ def optimize_mean_variance(
     # Solve the problem with SCIP solver
     problem = cp.Problem(objective, constraints)
     problem.solve(solver='SCIP', verbose=verbose)
-    print(objective.value)
+    
     # Extract results
     result = {
         'weights': {ticker: final_weights.value[i] for i, ticker in enumerate(tickers)},
@@ -239,7 +239,7 @@ def optimize_mean_variance(
         if ticker not in sell_decisions:
             sell_decisions[ticker] = []
         
-        if sell_fractions.value[i] > 0.001:  # Only include meaningful sells
+        if sell_fractions.value[i] > sell_threshold:  # Only include meaningful sells
             sell_decisions[ticker].append({
                 'lot': lot,
                 'fraction_to_sell': sell_fractions.value[i],
@@ -251,7 +251,7 @@ def optimize_mean_variance(
     # Extract buy decisions
     buy_decisions = {}
     for i, ticker in enumerate(tickers):
-        if buy_fractions.value[i] > 0.001:  # Only include meaningful buys
+        if buy_fractions.value[i] > buy_threshold:  # Only include meaningful buys
             buy_amount = buy_fractions.value[i] * portfolio_value
             buy_decisions[ticker] = {
                 'amount': buy_amount,

@@ -43,7 +43,10 @@ result = optimize_mean_variance(
     current_prices=current_prices,
     short_term_rate=0.35,
     long_term_rate=0.15,
-    current_date=current_date
+    current_date=current_date,
+    sell_threshold=0.001,
+    buy_threshold=0.001,
+    verbose=True
 )
 
 # Print the results
