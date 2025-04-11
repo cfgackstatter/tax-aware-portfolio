@@ -131,70 +131,93 @@ def optimize_mean_variance(
     lt_total_gains = cp.sum(lt_gains) if lt_gains else 0
     lt_total_losses = cp.sum(lt_losses) if lt_losses else 0
 
-    # Create binary variables for tax netting logic
-    st_net_positive = cp.Variable(1, boolean=True)
-    lt_net_positive = cp.Variable(1, boolean=True)
-
     # Calculate net values
     st_net = st_total_gains - st_total_losses
     lt_net = lt_total_gains - lt_total_losses
 
-    # Big-M constant for logical constraints
-    M = 1e6  # A large constant
+    # Create binary variables
+    st_is_positive = cp.Variable(1, boolean=True)
+    lt_is_positive = cp.Variable(1, boolean=True)
 
-    # Short-term net gain/loss logic
-    constraints.append(st_net <= M * st_net_positive)
-    constraints.append(st_net >= -M * (1 - st_net_positive))
+    # Create variables for net gains/losses
+    st_net_gain = cp.Variable(1)
+    st_net_loss = cp.Variable(1)
+    lt_net_gain = cp.Variable(1)
+    lt_net_loss = cp.Variable(1)
 
-    # Long-term net gain/loss logic
-    constraints.append(lt_net <= M * lt_net_positive)
-    constraints.append(lt_net >= -M * (1 - lt_net_positive))
+    # Big-M constant
+    M = portfolio_value  # Large number but not too large to avoid numerical issues
 
-    # Variables for net gains and losses after first netting
-    st_net_gain = cp.Variable(1, nonneg=True)
-    st_net_loss = cp.Variable(1, nonneg=True)
-    lt_net_gain = cp.Variable(1, nonneg=True)
-    lt_net_loss = cp.Variable(1, nonneg=True)
+    # Short-term net constraints
+    constraints.append(st_net <= M * st_is_positive)  # If st_net > 0, st_is_positive must be 1
+    constraints.append(st_net >= -M * (1 - st_is_positive))  # If st_net < 0, st_is_positive must be 0
 
-    # Constraints for net gains and losses
-    constraints.append(st_net_gain <= M * st_net_positive)
-    constraints.append(st_net_loss <= M * (1 - st_net_positive))
-    constraints.append(lt_net_gain <= M * lt_net_positive)
-    constraints.append(lt_net_loss <= M * (1 - lt_net_positive))
+    # For st_net_gain
+    constraints.append(st_net_gain <= st_net + M * (1 - st_is_positive))  # Upper bound
+    constraints.append(st_net_gain >= st_net - M * (1 - st_is_positive))  # Lower bound
+    constraints.append(st_net_gain <= M * st_is_positive)  # Force to 0 if st_net < 0
 
-    constraints.append(st_net_gain <= st_net + M * (1 - st_net_positive))
-    constraints.append(st_net_loss <= -st_net + M * st_net_positive)
-    constraints.append(lt_net_gain <= lt_net + M * (1 - lt_net_positive))
-    constraints.append(lt_net_loss <= -lt_net + M * lt_net_positive)
+    # For st_net_loss
+    constraints.append(st_net_loss <= -st_net + M * st_is_positive)  # Upper bound
+    constraints.append(st_net_loss >= -st_net - M * st_is_positive)  # Lower bound
+    constraints.append(st_net_loss <= M * (1 - st_is_positive))  # Force to 0 if st_net > 0
 
-    # Binary variables for remaining gains after cross-netting
-    st_has_remaining = cp.Variable(1, boolean=True)
-    lt_has_remaining = cp.Variable(1, boolean=True)
+    # Long-term net constraints (same logic as short-term)
+    constraints.append(lt_net <= M * lt_is_positive)
+    constraints.append(lt_net >= -M * (1 - lt_is_positive))
+
+    constraints.append(lt_net_gain <= lt_net + M * (1 - lt_is_positive))
+    constraints.append(lt_net_gain >= lt_net - M * (1 - lt_is_positive))
+    constraints.append(lt_net_gain <= M * lt_is_positive)
+
+    constraints.append(lt_net_loss <= -lt_net + M * lt_is_positive)
+    constraints.append(lt_net_loss >= -lt_net - M * lt_is_positive)
+    constraints.append(lt_net_loss <= M * (1 - lt_is_positive))
     
-    # Constraints for remaining gains
-    constraints.append(st_net_gain - lt_net_loss <= M * st_has_remaining)
-    constraints.append(lt_net_gain - st_net_loss <= M * lt_has_remaining)
-    
-    # Variables for final taxable amounts
-    st_taxable = cp.Variable(1, nonneg=True)
-    lt_taxable = cp.Variable(1, nonneg=True)
+    # Create binary variables
+    st_has_taxable = cp.Variable(1, boolean=True)
+    lt_has_taxable = cp.Variable(1, boolean=True)
 
-    # Constraints for final taxable amounts
-    constraints.append(st_taxable <= M * st_has_remaining)
-    constraints.append(lt_taxable <= M * lt_has_remaining)
-    
-    constraints.append(st_taxable <= st_net_gain - lt_net_loss + M * (1 - st_has_remaining))
-    constraints.append(lt_taxable <= lt_net_gain - st_net_loss + M * (1 - lt_has_remaining))
+    # Variables for final taxable amounts - remove nonneg=True to allow negative values
+    st_taxable = cp.Variable(1)  # Allow negative values
+    lt_taxable = cp.Variable(1)  # Allow negative values
+
+    # Binary variables for when net values after netting are positive or negative
+    st_result_positive = cp.Variable(1, boolean=True)
+    lt_result_positive = cp.Variable(1, boolean=True)
+
+    # For short-term result (st_net_gain - lt_net_loss)
+    constraints.append(st_net_gain - lt_net_loss <= M * st_result_positive)
+    constraints.append(st_net_gain - lt_net_loss >= -M * (1 - st_result_positive))
+
+    # For long-term result (lt_net_gain - st_net_loss)
+    constraints.append(lt_net_gain - st_net_loss <= M * lt_result_positive)
+    constraints.append(lt_net_gain - st_net_loss >= -M * (1 - lt_result_positive))
+
+    # Set st_taxable to the exact value of st_net_gain - lt_net_loss or negative st_net_loss
+    constraints.append(st_taxable <= (st_net_gain - lt_net_loss) + M * (1 - st_result_positive))
+    constraints.append(st_taxable >= (st_net_gain - lt_net_loss) - M * (1 - st_result_positive))
+
+    constraints.append(st_taxable <= -st_net_loss + M * st_result_positive)
+    constraints.append(st_taxable >= -st_net_loss - M * st_result_positive)
+
+    # Set lt_taxable to the exact value of lt_net_gain - st_net_loss or negative lt_net_loss
+    constraints.append(lt_taxable <= (lt_net_gain - st_net_loss) + M * (1 - lt_result_positive))
+    constraints.append(lt_taxable >= (lt_net_gain - st_net_loss) - M * (1 - lt_result_positive))
+
+    constraints.append(lt_taxable <= -lt_net_loss + M * lt_result_positive)
+    constraints.append(lt_taxable >= -lt_net_loss - M * lt_result_positive)
 
     # Calculate final tax liability
-    tax_liability = short_term_rate * st_taxable + long_term_rate * lt_taxable
+    tax_liability = cp.Variable(1)  # Allow positive or negative values
+    constraints.append(tax_liability == short_term_rate * st_taxable + long_term_rate * lt_taxable)
     
     # Mean-variance objective with tax penalty
     portfolio_return = final_weights @ alphas
     portfolio_risk = cp.quad_form(final_weights, cov_matrix)
 
     # Objective: maximize return - tax liability - risk penalty
-    objective = cp.Maximize(portfolio_return - tax_liability - risk_aversion * portfolio_risk)
+    objective = cp.Maximize(portfolio_return - tax_liability/portfolio_value - risk_aversion * portfolio_risk)
     
     # Solve the problem with SCIP solver
     problem = cp.Problem(objective, constraints)

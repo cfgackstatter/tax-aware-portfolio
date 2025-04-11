@@ -25,7 +25,7 @@ cov_matrix = np.array([
 
 # Current prices for the assets
 current_prices = {
-    "AAPL": 180.0,
+    "AAPL": 200.0,
     "MSFT": 300.0
 }
 
@@ -62,5 +62,7 @@ for ticker, decision in result['buy_decisions'].items():
 print("\nTax details:")
 tax_details = result['tax_details']
 print(f"Short-term gains: ${tax_details['short_term_gains']:.2f}")
+print(f"Short-term losses: ${tax_details['short_term_losses']:.2f}")
 print(f"Long-term gains: ${tax_details['long_term_gains']:.2f}")
+print(f"Long-term losses: ${tax_details['long_term_losses']:.2f}")
 print(f"Total tax liability: ${tax_details['tax_liability'].item():.2f}")
